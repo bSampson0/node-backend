@@ -1,10 +1,12 @@
-const express = require('express')
 const cheerio = require("cheerio")
 const axios = require("axios")
-
 const url = "https://en.wikipedia.org/wiki/List_of_current_UFC_fighters"
 const PORT = 6969
 const finalData = [];
+let testFinal = []
+
+const { Pool, Client } = require('pg')
+const connectionString = process.env.POSTGRES_URL
 
 const getData = async () => {
   const resp = await axios.get(url);
@@ -15,7 +17,7 @@ const getData = async () => {
     let tableData = []
 
     tableRows.each((index, row) => {
-      let rowData = $(row).text().trim().replace(/(\r?\n|\r)/gm, " ").split("  ")
+      let rowData = $(row).text().replace(/(\r?\n|\r)/gm, "|").split("|")
       tableData.push(rowData)
     })
 
@@ -34,103 +36,53 @@ const getData = async () => {
   })
 }
 
-const app = express()
+const main = () => {
 
-app.get('/releases', async (req, res) => {
-  const releases = {
-    title: "Recent releases and retirements",
-    data: finalData[0]
+  const combinedDivisions = cleanData([...finalData[8], ...finalData[9], 
+    ...finalData[10], ...finalData[11], ...finalData[12], ...finalData[13], 
+    ...finalData[14], ...finalData[15], ...finalData[16], ...finalData[17], 
+    ...finalData[18], ...finalData[19]]);
+
+  const pool = new Pool({
+    connectionString,
+  }) 
+
+
+  if (finalData.length > 0) {
+    pool.query('CREATE TABLE fighters (name varchar(40), age varchar(40), height varchar(40), nickname varchar(40), ufc_record varchar(40), mma_record varchar(40)) ', (err, res) => {
+    })
+    
+    combinedDivisions.forEach(row => {
+      let values = [row.name, row.age, row.height, row.nickname, row.ufc_record, row.mma_record]
+      pool.query(`INSERT INTO fighters (name, age, height, nickname, ufc_record, mma_record) 
+                  VALUES ($1, $2, $3, $4, $5, $6)`, values )
+    })
+    
+    
+    pool.query('SELECT * FROM fighters', (err, res) => {
+      console.log(res.rows)
+      pool.end()
+    })
   }
-  res.send(releases)
-})
+}
 
-app.get('/signings', async (req, res) => {
-  const signings = {
-    title: "Recent signings",
-    data: finalData[1]
-  }
-  console.log(signings.data.length)
-  res.send(signings)
-})
+const cleanData = (fightersArray) => {
+  return fightersArray.map(fighter => {
+    return { 
+      name: fighter.name,
+      age: fighter.age,
+      height: fighter["ht."],
+      nickname: fighter.nickname,
+      ufc_record: fighter.endeavor_record,
+      mma_record: fighter.mma_record,
+    }
+  })
+}
 
-app.get('/suspensions', async (req, res) => {
-  const suspensions = {
-    title: "Suspensions",
-    data: finalData[2]
-  }
-  console.log(suspensions.length)
-  res.send(suspensions)
-})
+const runApp = async () => {
+  await getData().then(() => {
+    main();
+  });
+}
 
-app.get('/heavyweights', async (req, res) => {
-  const fighters = {
-    title: 'Heavyweights',
-    data: finalData[8]
-  }
-  res.send(fighters)
-})
-
-app.get('/light-heavyweights', async (req, res) => {
-  const fighters = {
-    title: 'Light Heavyweights',
-    data: finalData[9]
-  }
-  res.send(fighters)
-})
-
-app.get('/middleweights', async (req, res) => {
-  const fighters = {
-    title: 'Middleweights',
-    data: finalData[10]
-  }
-  res.send(fighters)
-})
-
-app.get('/welterweights', async (req, res) => {
-  const fighters = {
-    title: 'Welterweights',
-    data: finalData[11]
-  }
-  res.send(fighters)
-})
-
-app.get('/lightweights', async (req, res) => {
-  const fighters = {
-    title: 'Lightweights',
-    data: finalData[12]
-  }
-  res.send(fighters)
-})
-
-app.get('/featherweights', async (req, res) => {
-  const fighters = {
-    title: 'Featherweights',
-    data: finalData[13]
-  }
-  res.send(fighters)
-})
-
-app.get('/bantamweights', async (req, res) => {
-  const fighters = {
-    title: 'Bantamweights',
-    data: finalData[14]
-  }
-  res.send(fighters)
-})
-
-app.get('/flyweights', async (req, res) => {
-  const fighters = {
-    title: 'Flyweights',
-    data: finalData[15]
-  }
-  res.send(fighters)
-})
-
-app.get('/', async (req, res) => {
-  res.send(finalData)
-})
-
-app.listen(PORT, async () => {
-  await getData();
-  console.log(`Listening on port ${PORT}`)
-})
+runApp();
